@@ -1,21 +1,39 @@
 import socket
 import sys
+import argparse
+
+parser = argparse.ArgumentParser(description='Create a UDP switch.')
+
+# Required arguments
+parser.add_argument('switchID', metavar='id', type=int,
+					help="ID of the switch")
+parser.add_argument('ctrHostname', metavar='hostname',
+					help="Hostname of the controller")
+parser.add_argument('ctrPort', metavar='port', type=int,
+					help="Port of the controller")
+
+# Optional arguments
+parser.add_argument('-f', metavar='nid', type=int,
+					help="ID of neighbor switch on the failed link")
+
+args = parser.parse_args()
+print args
 
 # Create a UDP socket
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+switch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-server_address = ('localhost', 10000)
+server_address = (args.ctrHostname, args.ctrPort)
+
 i = 0
-while i < 10:
+while i < 5:
 	i = i + 1
-	# message = raw_input("Enter message: ")
-	message = 'hello'
+	message = str(args.switchID)
 
 	# Send data
-	sent = sock.sendto(message, server_address)
+	sent = switch.sendto(message, server_address)
 
 	# Receive response
-	data, server = sock.recvfrom(4096)
-	print "Received: ", data
+	data, server = switch.recvfrom(4096)
+	print >>sys.stderr, 'Node received: ', data
 
-sock.close()
+switch.close()
