@@ -1,12 +1,27 @@
-import Queue
+import subprocess
 
-Qs = {}
-Qs['one'] = Queue.Queue()
-Qs['one'].put('111111111')
+print 'One line at a time:'
+proc = subprocess.Popen('python repeater.py', 
+                        shell=True,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        )
+for i in range(10):
+    proc.stdin.write('%d\n' % i)
+    output = proc.stdout.readline()
+    print output.rstrip()
+remainder = proc.communicate()[0]
+print remainder # remainder is empty
 
-Qs['two'] = Queue.Queue()
-Qs['two'].put('222222222')
+print
+print 'All output at once:'
+proc = subprocess.Popen('python repeater.py', 
+                        shell=True,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        )
+for i in range(10):
+    proc.stdin.write('%d\n' % i)
 
-for Q in Qs:
-	print Q
-	print Qs[Q].get()
+output = proc.communicate()[0]
+print output
