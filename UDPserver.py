@@ -23,9 +23,11 @@ excepts = []
 msg_queues = {}
 
 while True:
+
+	# print >>sys.stderr, 123
+
 	# Wait for next msg to read/write
 	readable, writable, exceptional = select.select(inputs, outputs, excepts)
-
 
 	for socket in readable:
 		

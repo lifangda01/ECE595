@@ -1,27 +1,26 @@
 import subprocess
+import time
+import fcntl
+import os, sys
 
-print 'One line at a time:'
-proc = subprocess.Popen('python repeater.py', 
-                        shell=True,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        )
-for i in range(10):
-    proc.stdin.write('%d\n' % i)
-    output = proc.stdout.readline()
-    print output.rstrip()
-remainder = proc.communicate()[0]
-print remainder # remainder is empty
+test = subprocess.Popen(['cat'], 
+                shell=True, 
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT)
 
-print
-print 'All output at once:'
-proc = subprocess.Popen('python repeater.py', 
-                        shell=True,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        )
-for i in range(10):
-    proc.stdin.write('%d\n' % i)
+fcntl.fcntl(test.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 
-output = proc.communicate()[0]
-print output
+
+while True:
+
+    test.stdin.write('hello' + '\n')
+
+    try:
+        msg = test.stdout.read()
+    except IOError:
+        pass
+    else:
+        print >>sys.stdout, msg
+
+    time.sleep(0.1)

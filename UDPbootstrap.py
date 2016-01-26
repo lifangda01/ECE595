@@ -1,39 +1,56 @@
 import subprocess
-import sys
+import os, sys, fcntl
+import time
 
 # Setup host
-server = subprocess.Popen('python UDPserver.py &', 
+server = subprocess.Popen(['python',' -u UDPserver.py &'], 
+# server = subprocess.Popen(['python -u UDPserver.py &'], 
 				shell=True, 
 				stdin=subprocess.PIPE,
 				stdout=subprocess.PIPE,
 				stderr=subprocess.STDOUT)
+# Make read non-blocking, raise an IOError if msg is empty
+fcntl.fcntl(server.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 
 # Setup switches
 switches = []
-s = subprocess.Popen(['python UDPnode.py 1 localhost 10000 &'], 
+s = subprocess.Popen(['python -u UDPnode.py 1 localhost 10000 &'], 
 				shell=True,
 				stdin=subprocess.PIPE,
 				stdout=subprocess.PIPE,
 				stderr=subprocess.STDOUT)
+fcntl.fcntl(s.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 switches.append(s)
-s = subprocess.Popen(['python UDPnode.py 2 localhost 10000 &'], 
+
+s = subprocess.Popen(['python -u UDPnode.py 2 localhost 10000 &'], 
 				shell=True,
 				stdin=subprocess.PIPE,
 				stdout=subprocess.PIPE,
 				stderr=subprocess.STDOUT)
+fcntl.fcntl(s.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 switches.append(s)
 
 # Pipe polling loop
 while True:
 
-	server_msg = server.stdout.readline()
-	if server_msg:
-		print >>sys.stdout, server_msg.rstrip()
+	# server.stdin.write('hello' + '\n')
+
+	try:
+		server_msg = server.stdout.read()
+	except IOError:
+		pass
+	else:
+		print >>sys.stdout, server_msg
 
 	for switch in switches:
-		switch_msg = switch.stdout.readline()
-		if output:
-			print >>sys.stdout, switch_msg.rstrip()
+		try:
+			switch_msg = switch.stdout.read()
+		except IOError:
+			pass
+		else:
+			print >>sys.stdout, switch_msg
+
+	time.sleep(.01)
 
 # # Setup host
 # subprocess.call(['python UDPserver.py &'], shell=True)

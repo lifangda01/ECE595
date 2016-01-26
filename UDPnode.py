@@ -33,6 +33,6 @@ while i < 5:
 
 	# Receive response
 	data, server = switch.recvfrom(4096)
-	print >>sys.stderr, 'Node %s - received: %s' % (str(args.switchID, data)
+	print >>sys.stderr, 'Node %s - received: %s' % (str(args.switchID), data)
 
 switch.close()
