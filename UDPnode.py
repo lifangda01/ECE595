@@ -1,5 +1,6 @@
+#!/usr/bin/env python
 import socket
-import sys
+import sys, fcntl, os
 import argparse
 
 parser = argparse.ArgumentParser(description='Create a UDP switch.')
@@ -23,9 +24,18 @@ switch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 server_address = (args.ctrHostname, args.ctrPort)
 
-i = 0
-while i < 5:
-	i = i + 1
+# Make stdin.read() non-blocking
+fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+
+while True:
+
+	# try:
+	# 	msg = sys.stdin.read()
+	# except IOError:
+	# 	pass
+	# else:
+	# 	print >>sys.stderr, msg
+
 	message = str(args.switchID)
 
 	# Send data

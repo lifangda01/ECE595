@@ -11,10 +11,10 @@ test = subprocess.Popen(['cat'],
 
 fcntl.fcntl(test.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 
-
+i = 0
 while True:
-
-    test.stdin.write('hello' + '\n')
+    i += 1
+    test.stdin.write('hello ' + str(i))
 
     try:
         msg = test.stdout.read()

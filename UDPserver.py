@@ -1,6 +1,7 @@
+#!/usr/bin/env python
 import select
 import socket
-import sys
+import sys, fcntl, os
 import Queue
 
 # Create a TCP/IP socket
@@ -22,9 +23,17 @@ excepts = []
 # Message queues for each live switch, indexed by address
 msg_queues = {}
 
+# Make stdin.read() non-blocking
+# fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+
 while True:
 
-	# print >>sys.stderr, 123
+    # try:
+    #     msg = sys.stdin.read()
+    # except IOError:
+    #     pass
+    # else:
+    #     print >>sys.stderr, msg
 
 	# Wait for next msg to read/write
 	readable, writable, exceptional = select.select(inputs, outputs, excepts)
@@ -41,7 +50,6 @@ while True:
 
 			# Echo msg back by appending to the msg queue
 			msg_queues[address].put(data)
-
 
 	for socket in writable:
 		for address in msg_queues:
