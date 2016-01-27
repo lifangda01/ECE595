@@ -1,26 +1,17 @@
-import subprocess
-import time
-import fcntl
-import os, sys
+import select
+import socket
+import sys, fcntl, os
+import Queue
+import pickle
+from UDPpackage import *
 
-test = subprocess.Popen(['cat'], 
-                shell=True, 
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT)
+test_msg = UDPpackage(ROUTE_REQUEST,
+                1, 2,
+                3,
+                ['hello world'])
 
-fcntl.fcntl(test.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+test_msg_pickled = pickle.dumps(test_msg)
 
-i = 0
-while True:
-    i += 1
-    test.stdin.write('hello ' + str(i))
+test_msg_unpickled = pickle.loads(test_msg_pickled)
 
-    try:
-        msg = test.stdout.read()
-    except IOError:
-        pass
-    else:
-        print >>sys.stdout, msg
-
-    time.sleep(0.1)
+print test_msg_unpickled.content

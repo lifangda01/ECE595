@@ -1,6 +1,8 @@
 import subprocess
 import os, sys
 
+# TODO: read in topology table
+
 cwd = os.getcwd()
 
 subprocess.call(['gnome-terminal', '-x', 

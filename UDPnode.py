@@ -2,6 +2,8 @@
 import socket
 import sys, fcntl, os
 import argparse
+import pickle
+from UDPpackage import *
 
 parser = argparse.ArgumentParser(description='Create a UDP switch.')
 
@@ -24,25 +26,22 @@ switch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 server_address = (args.ctrHostname, args.ctrPort)
 
-# Make stdin.read() non-blocking
-fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+# Register the switch
+msg_out = UDPpackage(REGISTER_REQUEST,
+					args.switchID, 0,
+					1,
+					[''])
+msg_out_pickled = pickle.dumps(msg_out)
+sent = switch.sendto(msg_out_pickled, server_address)
 
 while True:
 
-	# try:
-	# 	msg = sys.stdin.read()
-	# except IOError:
-	# 	pass
-	# else:
-	# 	print >>sys.stderr, msg
-
-	message = str(args.switchID)
-
 	# Send data
-	sent = switch.sendto(message, server_address)
+	sent = switch.sendto(msg_out_pickled, server_address)
 
 	# Receive response
 	data, server = switch.recvfrom(4096)
-	print >>sys.stderr, 'Node %s - received: %s' % (str(args.switchID), data)
+	msg_in = pickle.loads(data)
+	print >>sys.stderr, 'Node %s - received: %s' % (str(args.switchID), msg_in.content)
 
 switch.close()
