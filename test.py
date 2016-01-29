@@ -1,10 +1,7 @@
-from keyboardCapture import keyCapture as key
+import threading
 
-k = key()
-while 1:
-    try:
-        k.checkKey()
-    except IOError:
-        pass
-    finally:
-        pass
+def printit():
+  threading.Timer(1.0, printit).start()
+  print "Hello, World!"
+
+printit()

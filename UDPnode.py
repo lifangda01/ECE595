@@ -3,6 +3,7 @@ import socket, select
 import sys, fcntl, os
 import argparse
 import pickle
+import threading
 from UDPpackage import *
 from keyboardCapture import keyCapture
 
@@ -26,6 +27,7 @@ args = parser.parse_args()
 # key = keyCapture()
 
 # Create a UDP socket
+SWITCHID = args.switchID
 switch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 # Universal server socket
 server_address = (args.ctrHostname, args.ctrPort)
@@ -43,12 +45,23 @@ msg_buffer_dict = {}
 # Switch addresses, swID : swAddr
 sw_addresses_dict = {}
 
+# Switch liviness, incremented when no KEEP_ALIVE received from node for K seconds
+# swID, liviness
+sw_liveness_dict = {}
+
 # Called when REGISTER_RESPONSE is received
-def _neighborUpdate(msg, addr):
-	print 'Node %s - received: updated neighbors: %s' % (str(args.switchID), msg.content)
+def _handlerRegisterResponse(msg, addr):
+	print 'Node %s - received: REGISTER_RESPONSE %s' % (str(SWITCHID), msg.content)
+
+	# Add new neighbors
+	for (neighborID, neighborAddr) in msg.content:
+		sw_addresses_dict[neighborID] = neighborAddr
+		sw_liveness_dict[neighborID] = 0
+		messageSend(KEEP_ALIVE, SWITCHID, neighborID, 1, [(SWITCHID, SWITCHADDR)])
+
 
 # Called when ROUTE_RESPONSE is received
-def _packageForward(msg, addr):
+def _handlerRouteResponse(msg, addr):
 	# Get the info of the next node
 	nextID 		= msg.content[0]
 	nextAddr 	= msg.content[1]
@@ -58,8 +71,9 @@ def _packageForward(msg, addr):
 	if nextAddr == None:
 		return
 
-	# Save the switch's address for future use
+	# Save the switch's address for future use, it's gonna be one of the neighbors
 	sw_addresses_dict[nextID] = nextAddr
+	sw_liveness_dict[nextID] = 0
 
 	# Get the pending message from buffer
 	if destID in msg_buffer_dict:
@@ -70,14 +84,31 @@ def _packageForward(msg, addr):
 	
 	sent = switch.sendto(msg_out_pickled, nextAddr)
 
+def _handlerKeepAlive(msg, addr):
+	print 'Node %s - received: KEEP_ALIVE from node %s' % (str(SWITCHID), msg.source)
+	
+	# Recharge liveness
+	sw_liveness_dict[msg.source] = 0
 
-def _generalReceive(msg, addr):
-	print 'Node %s - received: general message %s' % (str(args.switchID), msg_in.content)
+	# Store source node if not already
+	if msg.source not in sw_addresses_dict:
+		sw_addresses_dict[msg.source] = addr
+		# Tell server we have discovered a new neighbor
+		# (switchID, switchAddr)
+		neighborInfoPairs = []	
+		for neighborID in sw_addresses_dict:
+			neighborInfoPairs.append( (neighborID, sw_addresses_dict[neighborID]) )
+		# Send TOPOLOGY_UPDATE along with neighbor info to server
+		messageSend(TOPOLOGY_UPDATE, SWITCHID, SERVERID, 1, neighborInfoPairs)
+
+def _handlerGeneralMessage(msg, addr):
+	print 'Node %s - received: GENERAL_MESSAGE %s' % (str(SWITCHID), msg_in.content)
 
 # Pool of functions to call when a message is received
-receiveTable = {	REGISTER_RESPONSE: 	_neighborUpdate,
-					ROUTE_RESPONSE:		_packageForward,
-					GENERAL_MESSAGE:	_generalReceive	
+receiveTable = {	REGISTER_RESPONSE: 	_handlerRegisterResponse,
+					ROUTE_RESPONSE:		_handlerRouteResponse,
+					GENERAL_MESSAGE:	_handlerGeneralMessage,
+					KEEP_ALIVE:			_handlerKeepAlive	
 				}
 
 # General function to call when sending a message
@@ -91,27 +122,67 @@ def messageSend(Type, Source, Destination, Length, Content):
 		nextAddr = sw_addresses_dict[Destination]
 	else:
 		# Query the server for next node to go
-		messageSend(ROUTE_REQUEST, args.switchID, 0, 1,
+		messageSend(ROUTE_REQUEST, SWITCHID, 0, 1,
 					[Destination])
 		# Buffer the message
 		msg_buffer_dict[Destination] = msg_out_pickled
-		print 'Node %s - ERROR cannot find next address' % str(args.switchID)
+		print 'Node %s - ERROR cannot find next address' % str(SWITCHID)
 		return
 
 	sent = switch.sendto(msg_out_pickled, nextAddr)
-	print 'Node %s - sent: type %s message to %s' % (str(args.switchID), str(Type), nextAddr)
+	# print 'Node %s - sent: type %s message to %s' % (str(SWITCHID), str(Type), nextAddr)
+
+# Send KEEP_ALIVE to neighbors and TOPOLOGY_UPDATE to server
+def periodicSend():
+	threading.Timer(Ksec, periodicSend).start()
+
+	# (switchID, switchAddr)
+	neighborInfoPairs = []	
+	# Send KEEP_ALIVE to each cached/active neighbor
+	for neighborID in sw_addresses_dict:
+		messageSend(KEEP_ALIVE, SWITCHID, neighborID, 1, [''])
+		neighborInfoPairs.append( (neighborID, sw_addresses_dict[neighborID]) )
+		sw_liveness_dict[neighborID] += 1
+
+	# Send TOPOLOGY_UPDATE along with neighbor info to server
+	messageSend(TOPOLOGY_UPDATE, SWITCHID, SERVERID, 1, neighborInfoPairs)
+
+# Check for inactive switches
+def periodicCheck():
+	threading.Timer(Msec, periodicCheck).start()
+	
+	# Use a list to avoid size change of dict during loop
+	inactiveList = []
+	for neighborID in sw_liveness_dict:
+		if sw_liveness_dict[neighborID] > 3:
+			inactiveList.append(neighborID)
+			# Declare inactive
+			del sw_addresses_dict[neighborID]
+			# (switchID, switchAddr)
+			neighborInfoPairs = []	
+			for activeID in sw_addresses_dict:
+				neighborInfoPairs.append( (activeID, sw_addresses_dict[activeID]) )
+			# Send TOPOLOGY_UPDATE along with neighbor info to server
+			messageSend(TOPOLOGY_UPDATE, SWITCHID, SERVERID, 1, neighborInfoPairs)
+	# Clean up
+	for inactiveID in inactiveList:
+		del sw_liveness_dict[inactiveID]
 
 # Register the switch to server
-messageSend(REGISTER_REQUEST, args.switchID, 0, 1, [''])
+messageSend(REGISTER_REQUEST, SWITCHID, SERVERID, 1, [''])
+
+SWITCHADDR = (socket.gethostbyname(socket.gethostname()), switch.getsockname()[1])
+print 'Node %s - initialized: %s' % (SWITCHID, SWITCHADDR)
+
+# Initiate background periodic messages
+periodicSend()
+periodicCheck()
 
 i = 0
 while True:
 	i += 1
 	# Wait for next msg to read/write
 	readable, writable, exceptional = select.select(inputs, outputs, excepts)
-
-	# # Send data
-	# messageSend(GENERAL_MESSAGE, args.switchID, 2, 1, ['hello'])
 
 	for socket in readable:
 		data, address = switch.recvfrom(4096)	
@@ -122,16 +193,11 @@ while True:
 
 	# The message to send back is determined by the message received
 	for socket in writable:
+		i +=1
 		# if key.checkKey():
 		# 	text = raw_input('Enter message to send: ')
-		if args.switchID == 1:
-			messageSend(GENERAL_MESSAGE, args.switchID, 2, 1, ['hello'])
-
-
-	# # Receive response
-	# data, address = switch.recvfrom(4096)
-	# msg_in = pickle.loads(data)
-	# receiveTable[msg_in.type](msg_in, address)
+		# if SWITCHID == 1:
+		# 	messageSend(GENERAL_MESSAGE, SWITCHID, 2, 1, ['hello'])
 
 switch.close()
 
