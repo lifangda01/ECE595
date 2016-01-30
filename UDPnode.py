@@ -32,6 +32,9 @@ switch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 # Universal server socket
 server_address = (args.ctrHostname, args.ctrPort)
 
+# Link failure?
+LINKFAILID = args.f
+
 # Input sockets to monitor
 inputs = [ switch ]
 # Output sockets to monitor
@@ -43,6 +46,7 @@ excepts = []
 msg_buffer_dict = {}
 
 # Switch addresses, swID : swAddr
+# Every switch in this dict is a neighbor
 sw_addresses_dict = {}
 
 # Switch liviness, incremented when no KEEP_ALIVE received from node for K seconds
@@ -85,6 +89,8 @@ def _handlerRouteResponse(msg, addr):
 	sent = switch.sendto(msg_out_pickled, nextAddr)
 
 def _handlerKeepAlive(msg, addr):
+	if msg.source == LINKFAILID:
+		return
 	print 'Node %s - received: KEEP_ALIVE from node %s' % (str(SWITCHID), msg.source)
 	
 	# Recharge liveness
@@ -140,7 +146,9 @@ def periodicSend():
 	neighborInfoPairs = []	
 	# Send KEEP_ALIVE to each cached/active neighbor
 	for neighborID in sw_addresses_dict:
-		messageSend(KEEP_ALIVE, SWITCHID, neighborID, 1, [''])
+		if neighborID == LINKFAILID:
+			continue
+		messageSend(KEEP_ALIVE, SWITCHID, neighborID, 0, [])
 		neighborInfoPairs.append( (neighborID, sw_addresses_dict[neighborID]) )
 		sw_liveness_dict[neighborID] += 1
 
@@ -169,18 +177,16 @@ def periodicCheck():
 		del sw_liveness_dict[inactiveID]
 
 # Register the switch to server
-messageSend(REGISTER_REQUEST, SWITCHID, SERVERID, 1, [''])
+messageSend(REGISTER_REQUEST, SWITCHID, SERVERID, 0, [])
 
 SWITCHADDR = (socket.gethostbyname(socket.gethostname()), switch.getsockname()[1])
-print 'Node %s - initialized: %s' % (SWITCHID, SWITCHADDR)
+print 'Node %s - created: %s' % (SWITCHID, SWITCHADDR)
 
 # Initiate background periodic messages
 periodicSend()
 periodicCheck()
 
-i = 0
 while True:
-	i += 1
 	# Wait for next msg to read/write
 	readable, writable, exceptional = select.select(inputs, outputs, excepts)
 
@@ -193,11 +199,7 @@ while True:
 
 	# The message to send back is determined by the message received
 	for socket in writable:
-		i +=1
-		# if key.checkKey():
-		# 	text = raw_input('Enter message to send: ')
-		# if SWITCHID == 1:
-		# 	messageSend(GENERAL_MESSAGE, SWITCHID, 2, 1, ['hello'])
+		pass
 
 switch.close()
 

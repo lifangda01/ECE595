@@ -28,11 +28,19 @@ excepts = []
 msg_queues_dict = {}
 
 # Switch addresses, swID : swAddr
+# Every switch in this table is active
 sw_addresses_dict = {}
 
 # Switch liviness, incremented when no TOPOLOGY_UPDATE received from node for K seconds
-# swID, liviness
+# swID : liviness
 sw_liveness_dict = {}
+
+# NeighborID graph, dict of list
+# Should not be changed unless a new topology file
+sw_neighbor_dict = {}
+sw_neighbor_dict[1] = [2,3]
+sw_neighbor_dict[2] = [1]
+sw_neighbor_dict[3] = [1]
 
 # Prepare to handle keyEvent
 # key = keyCapture()
@@ -54,7 +62,7 @@ def _handlerRouteRequest(msg, addr):
 		nextAddr = None
 
 	msg_out = UDPpackage(ROUTE_RESPONSE,
-						0, switchID,
+						SERVERID, switchID,
 						3,
 						# next switchID, next switch address and destID
 						[nextID, nextAddr, destID])
@@ -72,11 +80,13 @@ def _handlerRegisterRequest(msg, addr):
 	
 	print 'Server - received: REGISTER_REQUEST from node %s %s' % (str(switchID), msg.content)
 	
+	# FIXME: only neighbors not all switches!!!!!
 	# (switchID, switchAddr)
 	neighborInfoPairs = []
-	# Prepare to send the neighbor info back
-	for neighborID in sw_addresses_dict:
-		neighborInfoPairs.append( (neighborID, sw_addresses_dict[neighborID]) )
+	# Prepare to send the active neighbor info back
+	for neighborID in sw_neighbor_dict[switchID]:
+		if neighborID in sw_addresses_dict:
+			neighborInfoPairs.append( (neighborID, sw_addresses_dict[neighborID]) )
 
 	# Set up the sending message queue for new switch
 	# Also register the switch's address
@@ -87,7 +97,7 @@ def _handlerRegisterRequest(msg, addr):
 	# TODO: add routing table stuff here
 
 	msg_out = UDPpackage(REGISTER_RESPONSE,
-						0, switchID,
+						SERVERID, switchID,
 						1,
 						neighborInfoPairs)
 	msg_out_pickled = pickle.dumps(msg_out)
@@ -101,14 +111,25 @@ def _handlerTopologyUpdate(msg, addr):
 	switchID = msg.source
 	print 'Server - received: TOPOLOGY_UPDATE from node %s %s' % (str(switchID), msg.content)
 
+	activeNeighbors = []
+	# List of active neighborID from msg.content
+	for neighborID, neighborAddr in msg.content:
+		activeNeighbors.append(neighborID)
+
 	# Recharge liveness
 	sw_liveness_dict[switchID] = 0
 
-	# FIXME .5
+	# Any neighbor is dead? Check every theoretical neighbor
+	for neighborID in sw_neighbor_dict[switchID]:
+		if neighborID not in activeNeighbors and neighborID in sw_addresses_dict:
+			del sw_addresses_dict[neighborID]
+			del sw_liveness_dict[neighborID]
+			# print 'no longer active'
 
 	# We got a new node?
 	if switchID not in sw_addresses_dict:
 		sw_addresses_dict[switchID] = addr
+		sw_liveness_dict[switchID] = 0
 		# FIXME: redo the topology calculation here
 
 

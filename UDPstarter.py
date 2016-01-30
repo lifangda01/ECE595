@@ -2,15 +2,14 @@ import subprocess
 import os, sys
 
 # TODO: read in topology table
+numNodes = 3
 
 cwd = os.getcwd()
 
 subprocess.call(['gnome-terminal', '-x', 
 				cwd + '/UDPserver.py'])
 
-subprocess.call(['gnome-terminal', '-x', 
-				cwd + '/UDPnode.py', '1', 'localhost', '10000'])
-
-subprocess.call(['gnome-terminal', '-x', 
-				cwd + '/UDPnode.py', '2', 'localhost', '10000'])
+for i in range(1, numNodes+1):
+	subprocess.call(['gnome-terminal', '-x', 
+				cwd + '/UDPnode.py', str(i), 'localhost', '10000'])
 

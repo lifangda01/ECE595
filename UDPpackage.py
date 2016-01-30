@@ -8,10 +8,13 @@ ROUTE_REQUEST		= 6		# destID
 ROUTE_RESPONSE		= 7		# nextID, nextAddr, destID
 
 # Used for periodic functions
-Ksec = 1.0
-Msec = 5.0
+Ksec 				= 1.0
+Msec 				= 5.0
 
-SERVERID = 0
+SERVERID 			= 0
+
+ACTIVE 				= 1
+INACTIVE			= 0
 
 # An object representing an actual message
 # ID of server is 0
