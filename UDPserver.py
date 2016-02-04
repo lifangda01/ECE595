@@ -5,15 +5,34 @@ import sys, fcntl, os
 import Queue
 import pickle
 import threading
+import argparse
 from UDPpackage import *
 from keyboardCapture import keyCapture
+from SDNControllerUpdated import Graph
+
+parser = argparse.ArgumentParser(description='Create a UDP controller.')
+
+# Required arguments
+parser.add_argument('ctrHostname', metavar='hostname',
+					help="Hostname of the controller")
+parser.add_argument('ctrPort', metavar='port', type=int,
+					help="Port of the controller")
+
+# Optional arguments
+parser.add_argument('-v', action='store_true', default=False,
+					help="Enable high verbosity")
+
+args = parser.parse_args()
+
+VERBOSE = args.v
 
 # Create a TCP/IP socket
 server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 # Bind the socket to the port
-server_address = ('localhost', 10000)
+# server_address = ('localhost', 10000)
+server_address = (args.ctrHostname, args.ctrPort)
 print >>sys.stderr, 'Server - starting up on %s port %s' % server_address
 server.bind(server_address)
 
@@ -35,12 +54,15 @@ sw_addresses_dict = {}
 # swID : liviness
 sw_liveness_dict = {}
 
+# Initialize graph
+graph = Graph()
+# graph.calculate_all_neighbors()
+
 # NeighborID graph, dict of list
 # Should not be changed unless a new topology file
 sw_neighbor_dict = {}
-sw_neighbor_dict[1] = [2,3]
-sw_neighbor_dict[2] = [1]
-sw_neighbor_dict[3] = [1]
+for key in graph.nbors_list:
+	sw_neighbor_dict[int(key)] = map(int, list(graph.nbors_list[key]))
 
 # Prepare to handle keyEvent
 # key = keyCapture()
@@ -49,9 +71,9 @@ sw_neighbor_dict[3] = [1]
 # Called when ROUTE_REQUEST
 def _handlerRouteRequest(msg, addr):
 	# FIXME
-	nextID = 2;
 	switchID = msg.source
 	destID = msg.content[0]
+	nextID = int(graph.calculate_next_hop(str(switchID), str(destID)));
 
 	print 'Server - received: ROUTE_REQUEST from node ' + str(switchID) 
 	# TODO: add routing table stuff here
@@ -70,9 +92,33 @@ def _handlerRouteRequest(msg, addr):
 	msg_queues_dict[addr].put(msg_out_pickled)
 	print 'Server - sent: ROUTE_RESPONSE to node ' + str(switchID)
 
+# Calculate next hops for all nodes
+# Send ROUTE_UPDATE message to all nodes
+def _sendRouteUpdate():
+	# Update the graph first
+	activeIDs = list(sw_addresses_dict.keys())
+	graph.update_graph( map(str, activeIDs) )
+	sw_neighbor_dict = {}
+	for key in graph.nbors_list:
+		sw_neighbor_dict[int(key)] = map(int, list(graph.nbors_list[key]))
 
-def _routeTableUpdate():
-	pass
+	# Calculate next hops and send ROUTE_UPDATE per active node
+	print sw_addresses_dict
+	for activeID in sw_addresses_dict:
+		nextHopsList = []
+		for restActiveID in sw_addresses_dict:
+			if restActiveID == activeID:
+				continue
+			nextHop = graph.calculate_next_hop(str(activeID), str(restActiveID))
+			nextHopsList.append( (restActiveID, int(nextHop)) )
+
+		msg_out = UDPpackage(ROUTE_UPDATE,
+							SERVERID, activeID,
+							3,
+							nextHopsList)
+		msg_out_pickled = pickle.dumps(msg_out)
+		addr = sw_addresses_dict[activeID]
+		msg_queues_dict[addr].put(msg_out_pickled)
 
 # Called when REGISTER_REQUEST
 def _handlerRegisterRequest(msg, addr):
@@ -80,7 +126,7 @@ def _handlerRegisterRequest(msg, addr):
 	
 	print 'Server - received: REGISTER_REQUEST from node %s %s' % (str(switchID), msg.content)
 	
-	# FIXME: only neighbors not all switches!!!!!
+	# Only neighbors, not all switches!
 	# (switchID, switchAddr)
 	neighborInfoPairs = []
 	# Prepare to send the active neighbor info back
@@ -93,7 +139,6 @@ def _handlerRegisterRequest(msg, addr):
 	msg_queues_dict[addr] = Queue.Queue()
 	sw_addresses_dict[switchID] = addr
 	sw_liveness_dict[switchID] = 0
-
 	# TODO: add routing table stuff here
 
 	msg_out = UDPpackage(REGISTER_RESPONSE,
@@ -152,7 +197,7 @@ def periodicCheck():
 	inactiveList = []
 	for neighborID in sw_liveness_dict:
 		if sw_liveness_dict[neighborID] > 3:
-			print "died"
+			print 'Server - node %s has failed' % str(neighborID)
 			inactiveList.append(neighborID)
 			# Declare inactive
 			del sw_addresses_dict[neighborID]
@@ -160,10 +205,17 @@ def periodicCheck():
 	# Clean up
 	for inactiveID in inactiveList:
 		del sw_liveness_dict[inactiveID]
+	# Send ROUTE_UPDATE to every live switch
+	if inactiveList or len(sw_addresses_dict) != periodicCheck.numActiveSw:
+		periodicCheck.numActiveSw = len(sw_addresses_dict)
+		_sendRouteUpdate()
+periodicCheck.numActiveSw = 0
 
 # Initiate background periodic messages
 periodicSend()
 periodicCheck()
+
+# _sendRouteUpdate()
 
 while True:
 

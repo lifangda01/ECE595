@@ -21,6 +21,9 @@ parser.add_argument('ctrPort', metavar='port', type=int,
 parser.add_argument('-f', metavar='nid', type=int,
 					help="ID of neighbor switch on the failed link")
 
+parser.add_argument('-v', action='store_true', default=False,
+					help="Enable high verbosity")
+
 args = parser.parse_args()
 
 # Prepare to handle keyEvent
@@ -32,8 +35,13 @@ switch = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 # Universal server socket
 server_address = (args.ctrHostname, args.ctrPort)
 
+# Verbose?
+VERBOSE = args.v
+
 # Link failure?
 LINKFAILID = args.f
+if LINKFAILID:
+	print 'Node %s - created: LINKFAILID to node %s' % (str(SWITCHID), str(LINKFAILID))
 
 # Input sockets to monitor
 inputs = [ switch ]
@@ -91,7 +99,8 @@ def _handlerRouteResponse(msg, addr):
 def _handlerKeepAlive(msg, addr):
 	if msg.source == LINKFAILID:
 		return
-	print 'Node %s - received: KEEP_ALIVE from node %s' % (str(SWITCHID), msg.source)
+	if VERBOSE:
+		print 'Node %s - received: KEEP_ALIVE from node %s' % (str(SWITCHID), msg.source)
 	
 	# Recharge liveness
 	sw_liveness_dict[msg.source] = 0
@@ -110,11 +119,15 @@ def _handlerKeepAlive(msg, addr):
 def _handlerGeneralMessage(msg, addr):
 	print 'Node %s - received: GENERAL_MESSAGE %s' % (str(SWITCHID), msg_in.content)
 
+def _handlerRouteUpdate(msg, addr):
+	print 'Node %s - received: ROUTE_UPDATE %s' % (str(SWITCHID), msg_in.content)
+
 # Pool of functions to call when a message is received
 receiveTable = {	REGISTER_RESPONSE: 	_handlerRegisterResponse,
 					ROUTE_RESPONSE:		_handlerRouteResponse,
 					GENERAL_MESSAGE:	_handlerGeneralMessage,
-					KEEP_ALIVE:			_handlerKeepAlive	
+					KEEP_ALIVE:			_handlerKeepAlive,	
+					ROUTE_UPDATE:		_handlerRouteUpdate
 				}
 
 # General function to call when sending a message
