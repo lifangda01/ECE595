@@ -23,6 +23,15 @@ class Graph(object):
         self.distances[(from_node, to_node)] = distance
         self.distances[(to_node, from_node)] = distance
 
+    def remove_edge(self, from_node, to_node):
+        try:
+            self.edges[from_node].remove(to_node)
+            self.edges[to_node].remove(from_node)
+        except ValueError:
+            pass
+        # self.distances[(from_node, to_node)] = distance
+        # self.distances[(to_node, from_node)] = distance
+
     def create_graph(self):
         self.nodes = set()
         self.edges = defaultdict(list)
@@ -34,7 +43,7 @@ class Graph(object):
         for node in all_switches:
             self.add_node(node)
         numrows = len(self.new_topology)
-        numcols = len(self.new_topology[0])
+        # numcols = len(self.new_topology[0])
         count = 0
         while count < numrows:
             self.add_edge(self.new_topology[count][0], self.new_topology[count][1], int(self.new_topology[count][3]))
@@ -69,7 +78,10 @@ class Graph(object):
     def shortest_path(self, origin, destination):
         visited, paths = self.dijkstra(origin)
         full_path = deque()
-        _destination = paths[destination]
+        try:
+            _destination = paths[destination]
+        except KeyError:
+            return '0', ['0', '0']
         while _destination != origin:
             full_path.appendleft(_destination)
             _destination = paths[_destination]
@@ -93,7 +105,7 @@ class Graph(object):
             self.nbors_list = dict((k, tuple(v)) for k, v in temp_dict.iteritems())
         return self.nbors_list
 
-    def update_graph(self, active_list):
+    def update_graph(self, active_list, deadlinks):
         del self.new_topology[:]
         from_switches = sorted(set([row[0] for row in topology]))
         to_switches = sorted(set([row[1] for row in topology]))
@@ -114,6 +126,9 @@ class Graph(object):
         print ("The updated topology is shown below: ")
         pprint.pprint(self.new_topology)
         self.create_graph()
+        if deadlinks:
+            for from_node, to_node in deadlinks:
+                self.remove_edge(from_node, to_node)
         self.calculate_all_neighbors()
 
     def calculate_next_hop(self, source, destination):
@@ -125,22 +140,22 @@ class Graph(object):
 
 if __name__ == '__main__':
     graph = Graph()
-    print ("------------------------------------------------------------------------")
-    print ("The original topology is shown below: ")
-    pprint.pprint(topology)
-    nbors_response = graph.calculate_all_neighbors()
-    print ("The original neighbors list is shown below: ")
-    pprint.pprint(nbors_response)
-    print graph.calculate_next_hop('4','1')
-    active_neighbors = ['1','2','4','6']
-    graph.update_graph(active_neighbors)
-    print ("------------------------------------------------------------------------")
-    print ("The new topology is shown below: ")
-    pprint.pprint(graph.new_topology)
-    nbors_response = graph.calculate_all_neighbors()
-    print ("The new neighbors list is shown below: ")
-    pprint.pprint(nbors_response)
-    print graph.calculate_next_hop('4','1')
+    # print ("------------------------------------------------------------------------")
+    # print ("The original topology is shown below: ")
+    # pprint.pprint(topology)
+    # nbors_response = graph.calculate_all_neighbors()
+    # print ("The original neighbors list is shown below: ")
+    # pprint.pprint(nbors_response)
+    # print graph.calculate_next_hop('4','1')
+    # active_neighbors = ['1','2','4','6']
+    # graph.update_graph(active_neighbors)
+    # print ("------------------------------------------------------------------------")
+    # print ("The new topology is shown below: ")
+    # pprint.pprint(graph.new_topology)
+    # nbors_response = graph.calculate_all_neighbors()
+    # print ("The new neighbors list is shown below: ")
+    # pprint.pprint(nbors_response)
+    # print graph.calculate_next_hop('4','1')
 
     # active_neighbors = ['1','2','3','4','5','6']
     # graph.update_graph(active_neighbors)

@@ -67,6 +67,11 @@ for key in graph.nbors_list:
 # Prepare to handle keyEvent
 # key = keyCapture()
 
+global initDone
+initDone = 0
+
+deadLinks = []
+
 # Response functions have the same interface: msg, addr
 # Called when ROUTE_REQUEST
 def _handlerRouteRequest(msg, addr):
@@ -94,10 +99,10 @@ def _handlerRouteRequest(msg, addr):
 
 # Calculate next hops for all nodes
 # Send ROUTE_UPDATE message to all nodes
-def _sendRouteUpdate():
+def _sendRouteUpdate(deadlinks=[]):
 	# Update the graph first
 	activeIDs = list(sw_addresses_dict.keys())
-	graph.update_graph( map(str, activeIDs) )
+	graph.update_graph( map(str, activeIDs), deadlinks )
 	sw_neighbor_dict = {}
 	for key in graph.nbors_list:
 		sw_neighbor_dict[int(key)] = map(int, list(graph.nbors_list[key]))
@@ -139,7 +144,16 @@ def _handlerRegisterRequest(msg, addr):
 	msg_queues_dict[addr] = Queue.Queue()
 	sw_addresses_dict[switchID] = addr
 	sw_liveness_dict[switchID] = 0
-	# TODO: add routing table stuff here
+	# FIXME: add routing table stuff here
+
+	# Clear Associate deadlinks of this new node
+	global deadLinks
+	deadLinks = [(f,t) for f,t in deadLinks if f!=str(switchID) and t!=str(switchID)]
+	global initDone
+	initDone = 0
+
+	if initDone:
+		_sendRouteUpdate(deadlinks=deadLinks)
 
 	msg_out = UDPpackage(REGISTER_RESPONSE,
 						SERVERID, switchID,
@@ -149,12 +163,11 @@ def _handlerRegisterRequest(msg, addr):
 	msg_queues_dict[addr].put(msg_out_pickled)
 	print 'Server - sent: REGISTER_RESPONSE to node ' + str(switchID)
 
-def _switchDelete(addr):
-	pass
-
 def _handlerTopologyUpdate(msg, addr):
 	switchID = msg.source
-	print 'Server - received: TOPOLOGY_UPDATE from node %s %s' % (str(switchID), msg.content)
+	
+	if VERBOSE:
+		print 'Server - received: TOPOLOGY_UPDATE from node %s %s' % (str(switchID), msg.content)
 
 	activeNeighbors = []
 	# List of active neighborID from msg.content
@@ -163,20 +176,28 @@ def _handlerTopologyUpdate(msg, addr):
 
 	# Recharge liveness
 	sw_liveness_dict[switchID] = 0
+	
+	# Any link is dead?
+	global deadLinks
+	if initDone > 1:
+		for neighborID in sw_neighbor_dict[switchID]:
+			# If not an active neighbor but live seen from controller, then the link is dead
+			if neighborID not in activeNeighbors and neighborID in sw_addresses_dict:
+				if (str(switchID), str(neighborID)) not in deadLinks:
+					deadLinks.append( (str(switchID), str(neighborID)) )
+				# sw_neighbor_dict[switchID].remove(neighborID)
 
-	# Any neighbor is dead? Check every theoretical neighbor
-	for neighborID in sw_neighbor_dict[switchID]:
-		if neighborID not in activeNeighbors and neighborID in sw_addresses_dict:
-			del sw_addresses_dict[neighborID]
-			del sw_liveness_dict[neighborID]
-			# print 'no longer active'
+		if deadLinks and _handlerTopologyUpdate.numDeadLinks != len(deadLinks):
+			_sendRouteUpdate(deadlinks=deadLinks)
+			print "Server - detected: link has failed", deadLinks
 
 	# We got a new node?
 	if switchID not in sw_addresses_dict:
 		sw_addresses_dict[switchID] = addr
 		sw_liveness_dict[switchID] = 0
 		# FIXME: redo the topology calculation here
-
+	_handlerTopologyUpdate.numDeadLinks = len(deadLinks)
+_handlerTopologyUpdate.numDeadLinks = 0
 
 # Pool of functions to call when a message is received
 receiveTable = {	REGISTER_REQUEST: 	_handlerRegisterRequest,
@@ -195,9 +216,10 @@ def periodicCheck():
 	threading.Timer(Msec, periodicCheck).start()
 	# Use a list to avoid size change of dict during loop
 	inactiveList = []
+	# Find dead switches (not links)
 	for neighborID in sw_liveness_dict:
 		if sw_liveness_dict[neighborID] > 3:
-			print 'Server - node %s has failed' % str(neighborID)
+			print 'Server - detected: node %s has failed' % str(neighborID)
 			inactiveList.append(neighborID)
 			# Declare inactive
 			del sw_addresses_dict[neighborID]
@@ -208,7 +230,9 @@ def periodicCheck():
 	# Send ROUTE_UPDATE to every live switch
 	if inactiveList or len(sw_addresses_dict) != periodicCheck.numActiveSw:
 		periodicCheck.numActiveSw = len(sw_addresses_dict)
-		_sendRouteUpdate()
+		_sendRouteUpdate(deadlinks=deadLinks)
+	global initDone
+	initDone += 1
 periodicCheck.numActiveSw = 0
 
 # Initiate background periodic messages

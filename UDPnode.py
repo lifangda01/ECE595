@@ -41,7 +41,7 @@ VERBOSE = args.v
 # Link failure?
 LINKFAILID = args.f
 if LINKFAILID:
-	print 'Node %s - created: LINKFAILID to node %s' % (str(SWITCHID), str(LINKFAILID))
+	print 'Node %s - created: LINKFAILED to node %s' % (str(SWITCHID), str(LINKFAILID))
 
 # Input sockets to monitor
 inputs = [ switch ]
@@ -188,6 +188,9 @@ def periodicCheck():
 	# Clean up
 	for inactiveID in inactiveList:
 		del sw_liveness_dict[inactiveID]
+	if inactiveList:
+		print 'Node %s - detected: neighbor' % SWITCHID , inactiveList,' has failed'
+
 
 # Register the switch to server
 messageSend(REGISTER_REQUEST, SWITCHID, SERVERID, 0, [])
