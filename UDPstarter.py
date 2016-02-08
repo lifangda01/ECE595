@@ -1,7 +1,6 @@
 import subprocess
 import os, sys
 import argparse
-from InputFileParser import number_switches
 
 parser = argparse.ArgumentParser(description='Create a centralized UDP network.')
 
@@ -17,15 +16,13 @@ args = parser.parse_args()
 
 cwd = os.getcwd()
 
-# topology, number_switches = readInputFile(args.topoFile)
-# subprocess.call(['python', cwd + '/InputFileParser.py', args.topoFile])
-
 # Read in topology table
+with open(args.topoFile, 'r') as inputFile:
+	number_switches = inputFile.readline()
 numNodes = int(number_switches)
 
-
 argList = ['gnome-terminal', '-x', 
-			cwd + '/UDPserver.py', 'localhost', '10000']
+			cwd + '/UDPserver.py', 'localhost', '10000', args.topoFile]
 if args.v:
 	argList.append('-v')
 
@@ -37,4 +34,3 @@ for i in range(1, numNodes+1):
 	if args.v:
 		argList.append('-v')
 	subprocess.call(argList)
-

@@ -8,7 +8,7 @@ import threading
 import argparse
 from UDPpackage import *
 from keyboardCapture import keyCapture
-from SDNControllerUpdated import Graph
+from SDNController import Graph
 
 parser = argparse.ArgumentParser(description='Create a UDP controller.')
 
@@ -17,6 +17,8 @@ parser.add_argument('ctrHostname', metavar='hostname',
 					help="Hostname of the controller")
 parser.add_argument('ctrPort', metavar='port', type=int,
 					help="Port of the controller")
+parser.add_argument('topoFile', metavar='filename',
+					help="Name of the topology file")
 
 # Optional arguments
 parser.add_argument('-v', action='store_true', default=False,
@@ -33,7 +35,7 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 # Bind the socket to the port
 # server_address = ('localhost', 10000)
 server_address = (args.ctrHostname, args.ctrPort)
-print >>sys.stderr, 'Server - starting up on %s port %s' % server_address
+print >>sys.stderr, 'Server - info: starting up on %s port %s' % server_address
 server.bind(server_address)
 
 # Input sockets to monitor
@@ -55,7 +57,7 @@ sw_addresses_dict = {}
 sw_liveness_dict = {}
 
 # Initialize graph
-graph = Graph()
+graph = Graph(args.topoFile)
 # graph.calculate_all_neighbors()
 
 # NeighborID graph, dict of list
@@ -108,6 +110,7 @@ def _sendRouteUpdate(deadlinks=[]):
 		sw_neighbor_dict[int(key)] = map(int, list(graph.nbors_list[key]))
 
 	# Calculate next hops and send ROUTE_UPDATE per active node
+	print 'Server - info: current active switches (switchID: switchAddress):'
 	print sw_addresses_dict
 	for activeID in sw_addresses_dict:
 		nextHopsList = []
@@ -265,4 +268,3 @@ while True:
 				data = msg_queues_dict[address].get_nowait()
 				sent = server.sendto(data, address)
 				# print >>sys.stderr, 'Server - sent: %s bytes back to %s' % (sent, address)
-
